@@ -1,0 +1,48 @@
+#export table
+
+pg_dump -U hdfc_user -d hdfc_db -t emp > emp.sql
+
+#import table
+psql -U hdfc_user -d hdfc_db < emp.sql
+(or)
+psql -U hdfc_user -d hdfc_db -f emp.sql
+
+Other options
+-------------
+
+pg_dump -U hdfc_user -d hdfc_db -t emp -Fc -f emp.bkp   #custom format, cannot read(-Z)
+pg_dump -U hdfc_user -d hdfc_db -t emp -Fp -f emp.plain	#plain text, can read
+pg_dump -U hdfc_user -d hdfc_db -t emp -Fd -f emp       #directory format, parallelism(-j)
+pg_dump -U hdfc_user -d hdfc_db -t emp -Ft -f emp.tar   #tar format (ignore)
+
+schema level
+-------------
+pg_dump -U hdfc_user -d hdfc_db -n hdfc_user -Fc -f hdfc_user.bkp	#custom format, cannot read(-Z)
+
+
+To restore
+-----------
+pg_restore -U hdfc_user -d hdfc_db -t emp hdfc_user.bkp   #restore named table
+
+
+pg_dump -U hdfc_user -d hdfc_db > a.sql
+
+pg_dump -U hdfc_user -d hdfc_db -t emp > a.sql
+
+pg_dump -U hdfc_user -d hdfc_db -T emp > a.sql
+
+
+pg_dump -U hdfc_user -d hdfc_db -t emp* -T emp2 > a.sql
+
+pg_dump -U hdfc_user -d hdfc_db -N schema1 > a.sql
+
+More help commands
+
+[postgres@lab01 dumps]$ man pg_dump
+
+pg_dump -U hdfc_user -d hdfc_db -Fd emp
+pg_restore -U hdfc_user -d hdfc_db emp
+
+redirect error to file.txt
+-----------------------------
+pg_dump -U hdfc_user -d hdfc_db -t emp1 -Fc -f a.sql 2> file.txt
