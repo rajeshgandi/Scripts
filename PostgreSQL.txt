@@ -254,3 +254,13 @@ FROM (
  -- AND table_schema = 'dbo'
 ) t
 ORDER BY row_count DESC;
+----------------
+PGPASSWORD=XXXXX   /home/ssm-user/pgsql/bin/pg_dump -h annap08192022-us-east-1.cluster-ro-cmio28anpg2g.us-east-1.rds.amazonaws.com -d annap -U postgres -n isin  | aws s3 cp - s3://fdss3-631767741709-misc-data-us-east-1/sqlteam/isin_$(date +"%Y_%m_%d").sql
+
+
+aws s3 ls s3://fdss3-631767741709-misc-data-us-east-1/sqlteam/isin_$(date +"%Y_%m_%d").sql
+
+grep "^GRANT\|^REVOKE" meta_data_$(date +"%Y_%m_%d").sql
+
+cat meta_data_$(date +"%Y_%m_%d").sql | grep "ALTER DEFAULT PRIVILEGES"
+
