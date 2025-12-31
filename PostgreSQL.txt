@@ -1,0 +1,256 @@
+Start time
+SELECT current_timestamp - pg_postmaster_start_time();
+Sessions:
+select count(1), state from pg_stat_activity group by 2;
+User Administration
+SELECT * FROM information_schema.table_privileges where table_name='bookings';
+SELECT grantee, privilege_type
+FROM information_schema.role_table_grants
+WHERE table_name='emp'
+select schemaname, tablename, tableowner from pg_tables where
+tablename='ftp_location';
+\ddp
+\dp
+SELECT grantor, grantee, table_schema, table_name, privilege_type
+FROM information_schema.table_privileges
+WHERE grantee ='rajeshdb_admin_user'
+-------
+SELECT grantee AS user, CONCAT(table_schema, '.', table_name) AS table,
+ CASE
+ WHEN COUNT(privilege_type) = 7 THEN 'ALL'
+ ELSE ARRAY_TO_STRING(ARRAY_AGG(privilege_type), ', ')
+ END AS grants
+FROM information_schema.role_table_grants
+GROUP BY table_name, table_schema, grantee;
+----------
+SELECT * FROM pg_roles;
+SELECT * FROM pg_roles WHERE rolname='your role name';
+Database owner:
+Select d.datname, r.rolname
+From pg_catalog.pg_database d, pg_catalog.pg_roles r
+Where d.datdba =r.oid;
+SELECT has_table_privilege('myschema.mytable', 'select');
+https://www.postgresql.org/docs/9.1/functions-info.html
+https://www.postgresql.org/docs/7.3/functions-misc.html
+https://dba.stackexchange.com/questions/306192/postgresql-12-ddluser-and-dmluser-for-same-schema-dml-permissiondenied-on-tab
+alter user awsnirnaydb_admin_user createdb;
+Schema-wise size
+SELECT schema_name,
+ pg_size_pretty(sum(table_size)::bigint),
+1. Queries
+Friday, August 30, 2024 5:49 PM
+ PostgreSQL Page 1
+ pg_size_pretty(sum(table_size)::bigint),
+ (sum(table_size) / pg_database_size(current_database())) * 100
+FROM (
+ SELECT pg_catalog.pg_namespace.nspname as schema_name,
+ pg_relation_size(pg_catalog.pg_class.oid) as table_size
+ FROM pg_catalog.pg_class
+ JOIN pg_catalog.pg_namespace ON relnamespace = pg_catalog.pg_namespace.oid
+) t
+GROUP BY schema_name
+ORDER BY schema_name;
+Blockings blwt
+select pid,
+ usename,
+ pg_blocking_pids(pid) as blocked_by,
+ query as waiting_query
+from pg_stat_activity
+where cardinality(pg_blocking_pids(pid)) > 0;
+Top 10 tables:
+select schemaname as table_schema, relname as table_name, pg_size_pretty(pg_total_relation_size(relid)) as total_size,
+pg_size_pretty(pg_relation_size(relid)) as data_size, pg_size_pretty(pg_total_relation_size(relid) - pg_relation_size(relid)) as
+external_size from pg_catalog.pg_statio_user_tables order by pg_total_relation_size(relid) desc, pg_relation_size(relid) desc
+limit 10;
+Long running
+SELECT
+ pid,
+ now() - pg_stat_activity.query_start AS duration,
+ query,
+ state
+FROM pg_stat_activity
+WHERE (now() - pg_stat_activity.query_start) > interval '1 minutes';
+Idle
+SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE
+datname = 'ftsdb-dr2' AND pid <> pg_backend_pid() AND state in ('idle');
+------------
+Parameter group family -> aurora-postgresql13
+Type : DB Cluster Parameter Group
+Group name : standard.aurora-postgresql13 (following naming convention)
+pg_stat_statements.max 5000
+pg_stat_statements.save 1
+pg_stat_statements.track TOP
+pg_stat_statements.track_utility 1
+CREATE USER
+CREATE USER ntms_dev WITH PASSWORD 'ntms_dev';
+CREATE DATABASE ntms_dev WITH OWNER ntms_dev ENCODING 'UTF8';
+CREATE SCHEMA ntms_dev;
+sed -i 's/old/new/g' dump.sql
+ PostgreSQL Page 2
+CSV
+PGPASSWORD=ld_6GaHgjxj psql -h 100.65.203.8 -U ld_final -d ld_live -c "\copy (select grade_id,grade_name,percentage
+from grade_master) to '/home/postgres/prabanda_jan22_ld.csv' csv header" > /home/postgres/ld.log
+\copy (select * from m_mhs_outbound_dtls) to '/home/postgres/irf_jun12.csv' csv header;
+\COPY hosp_bank_dtls_dummy FROM '/home/postgres/17sathish.csv' DELIMITERS ',' CSV HEADER;
+abnhpmapiprod=>\copy KARNATAKA_PACKAGE_MST from '/home/postgres/mani.csv' delimiter E'\t' csv header;
+\COPY kb_wallet_consumption FROM '/u01/KBF1.csv' DELIMITERS ',' CSV;
+\COPY kb_wallet_consumption FROM '/u01/KBF1.csv' DELIMITERS ',' CSV HEADER;
+psql -d ndwh -U postgres -c "\copy (SELECT * FROM summary.tms_t_detailed_case_report WHERE pat_state_id='32' AND
+REG_HOSP_DATE >'2020-07-01' and REG_HOSP_DATE <'2020-08-14') to '/home/postgres/part1.csv' csv header"
+------------------
+alter extension pgcrypto set schema pb_test;
+Pg_dump
+ONLY TABLE STRUCTURE
+pg_dump -d empnl_live -U empnl_final -t total_tms_hem_data --exclude-table-data=total_tms_hem_data >
+total_tms_hem_data_j3.sql
+ONLY DATA
+pg_dump -d empnl_live -U empnl_final --data-only -t total_tms_hem_data > ASD.sql
+INSERT SCRIPTS
+pg_dump -d empnl_live -U empnl_final --column-inserts --data-only -t total_tms_hem_data > ASD.sql
+READ ONLY ACCESS
+CREATE USER ntms_read WITH PASSWORD 'ntms_read'; use psql
+GRANT CONNECT ON DATABASE ntms_live TO ntms_read; use ntms_final
+GRANT USAGE ON SCHEMA ntms_final TO ntms_read; use ntms_final
+GRANT SELECT ON ALL TABLES IN SCHEMA ntms_final TO ntms_read; use ntms_final
+ALTER DEFAULT PRIVILEGES IN SCHEMA ntms_final
+GRANT SELECT ON TABLES TO ntms_read; use ntms_final
+alter user ntms_read set search_path ='ntms_final',public; use ntms_read
+------------
+PGPASSWORD=stage_hp pg_dump -h 100.65.204.138 -U stage_hp -d stage_hp --column-inserts --data-only -t M_RULES >
+M_RULES.sql
+PARTITIONED TABLE
+SELECT
+ pi.inhparent::regclass AS parent_table_name,
+ pg_size_pretty(sum(pg_total_relation_size(psu.relid))) AS total,
+ pg_size_pretty(sum(pg_relation_size(psu.relid))) AS internal,
+ pg_size_pretty(sum(pg_table_size(psu.relid) - pg_relation_size(psu.relid))) AS external, -- toast
+ pg_size_pretty(sum(pg_indexes_size(psu.relid))) AS indexes
+FROM pg_catalog.pg_statio_user_tables psu
+ JOIN pg_class pc ON psu.relname = pc.relname
+ JOIN pg_database pd ON pc.relowner = pd.datdba
+ JOIN pg_inherits pi ON pi.inhrelid = pc.oid
+WHERE pd.datname = 'benchmarks_datastore'
+GROUP BY pi.inhparent
+ORDER BY sum(pg_total_relation_size(psu.relid)) DESC;
+ PostgreSQL Page 3
+SELECT relname AS table_name,
+ pg_size_pretty(pg_total_relation_size(relid)) AS total,
+ pg_size_pretty(pg_relation_size(relid)) AS internal,
+ pg_size_pretty(pg_table_size(relid) -pg_relation_size(relid)) AS external,
+ pg_size_pretty(pg_indexes_size(relid)) AS indexes
+FROM pg_catalog.pg_statio_user_tables
+ORDER BY pg_total_relation_size(relid) DESC;
+From <https://stackoverflow.com/questions/54920864/get-table-size-of-partitioned-table-postgres-10>
+Top 10 table:
+select schemaname as table_schema,
+ relname as table_name,
+ pg_size_pretty(pg_total_relation_size(relid)) as total_size,
+ pg_size_pretty(pg_relation_size(relid)) as data_size,
+ pg_size_pretty(pg_total_relation_size(relid) - pg_relation_size(relid))
+ as external_size
+from pg_catalog.pg_statio_user_tables
+order by pg_total_relation_size(relid) desc,
+ pg_relation_size(relid) desc
+limit 500;
+-----------
+SELECT 'DROP TABLE IF EXISTS "' || tablename || '" CASCADE;' from pg_tables WHERE schemaname = 'public';
+SELECT 'DROP TABLE IF EXISTS ' || tablename || ' CASCADE;' from pg_tables WHERE schemaname = 'public';
+SELECT 'analyze public.'||tablename ||';' from pg_tables WHERE schemaname = 'public';
+CPU ISSUE
+SELECT
+pss.userid,
+pss.dbid,
+pd.datname as db_name,
+round(pss.total_time::numeric, 2) as total_time,
+pss.calls,
+round(pss.mean_time::numeric, 2) as mean,
+round((100 * pss.total_time / sum(pss.total_time::numeric) OVER ())::numeric, 2) as cpu_portion_pctg,
+pss.query
+FROM pg_stat_statements pss, pg_database pd
+WHERE pd.oid=pss.dbid
+ORDER BY pss.total_time
+DESC LIMIT 10;
+SELECT
+pss.userid,
+pss.dbid,
+pd.datname as db_name,
+round((pss.total_exec_time + pss.total_plan_time)::numeric, 2) as total_time,
+pss.calls,
+round((pss.mean_exec_time+pss.mean_plan_time)::numeric, 2) as mean,
+round((100 * (pss.total_exec_time + pss.total_plan_time) / sum((pss.total_exec_time + pss.total_plan_time)::numeric)
+OVER ())::numeric, 2) as cpu_portion_pctg,
+pss.query
+FROM pg_stat_statements pss, pg_database pd
+WHERE pd.oid=pss.dbid AND datname='atlasdiagnosticconsole_db'
+ORDER BY (pss.total_exec_time + pss.total_plan_time)
+DESC LIMIT 30;
+ PostgreSQL Page 4
+ANALYZE ALL TABLES IN A PARTICULAR SCHEMA
+DO $$ DECLARE
+ r RECORD;
+BEGIN
+ FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
+ EXECUTE 'analyze public.' || quote_ident(r.tablename) || '';
+ END LOOP;
+END $$;
+DROP ALL TABLES IN A PARTICULAR SCHEMA
+DO $$ DECLARE
+ r RECORD;
+BEGIN
+ FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
+ EXECUTE 'DROP TABLE ' || quote_ident(r.tablename) || ' CASCADE';
+ END LOOP;
+END $$;
+https://savvytime.com/converter/aedt-to-utc-ist
+https://jayendrapatil.com/tag/aurora-backup-restore/
+ALTER TABLE table_name SET (autovacuum_enabled = false);
+PostgreSQL database tables are auto-vacuumed by default when 20% of the rows plus 50 rows
+are inserted, updated, or deleted.
+Tables are auto-analyzed when a threshold is met for 10% of the rows plus 50 rows.
+Vacuum-threshold = vacuum-base-threshold + vacuum-scale-factor * number-of-tuples
+autovacuum_vacuum_scale_factor is 0.2 (20%), and autovacuum_analyze_scale_factor is 0.1 (10%).
+https://aws.amazon.com/blogs/database/understanding-autovacuum-in-amazon-rds-for-postgresql-environments/
+To Check autovacuum disbaled tables list :
+select relnamespace::regnamespace as schema_name,
+ relname as table_name
+from pg_class
+where 'autovacuum_enabled=false' = any(reloptions);
+From <https://stackoverflow.com/questions/58432060/how-to-identify-the-tables-which-are-vacuum-is-disabled>
+-------------------
+begin;
+SET max_parallel_maintenance_workers TO 2;
+SET maintenance_work_mem TO '6 GB';
+CREATE INDEX ix_equity_common_3d_udate ON dbo.equity_common_3d USING btree (update_date);
+commit;
+analyze dbo.equity_common_3d;
+commit;
+--------------------------
+SET max_parallel_maintenance_workers TO 2;
+SET maintenance_work_mem TO '4 GB';
+CREATE INDEX datemodified_idx ON dbo.persistedcalculations(datemodified);
+ PostgreSQL Page 5
+CREATE INDEX datemodified_idx ON dbo.persistedcalculations(datemodified);
+---------
+create table test as select * from generate_series(1,1000000);
+delete from test where generate_series<500000;
+-----------------
+select max(length(result_file)) from isin.anna_val_tool ;
+select table_schema, table_name,column_name,is_nullable,data_type,character_maximum_length from
+information_schema.columns where data_type='bytea' order by table_schema;
+select max(length(column_name)) from dbo.tablename;
+Count of rows for all tables in PostgreSQL
+SELECT table_schema, table_name,
+ (xpath('/row/cnt/text()', xml_count))[1]::text::int AS row_count
+FROM (
+ SELECT table_name, table_schema,
+ query_to_xml(
+ format('select count(*) as cnt from %I.%I', table_schema, table_name),
+ false,
+ true,
+ ''
+ ) AS xml_count
+ FROM information_schema.tables
+ WHERE table_schema not in ('pg_catalog', 'information_schema')
+ -- AND table_schema = 'dbo'
+) t
+ORDER BY row_count DESC;
