@@ -1,0 +1,136 @@
+-- Drop it if it exists so we start fresh
+DROP TABLE IF EXISTS orders_flat CASCADE;
+
+-- Create the single large table
+CREATE TABLE orders_flat (
+    id BIGSERIAL PRIMARY KEY,       -- Unique ID
+    order_date TIMESTAMP NOT NULL,  -- We will eventually RANGE partition on this
+    customer_id INT NOT NULL,       -- We could HASH partition on this
+    region TEXT NOT NULL,           -- We could LIST partition on this
+    amount NUMERIC(10,2),
+    details TEXT                    -- Padding to make the table size large (2GB)
+);
+
+-- Create standard indexes (as you would have in production)
+-- These indexes will become large and slow as data grows
+CREATE INDEX idx_orders_date ON orders_flat(order_date);
+CREATE INDEX idx_orders_region ON orders_flat(region);
+
+-- This query acts as a data generator. 
+-- It may take 30-60 seconds to run depending on your disk speed.
+INSERT INTO orders_flat (order_date, customer_id, region, amount, details)
+SELECT
+    -- Random date between Jan 1, 2023 and Jan 1, 2024
+    TIMESTAMP '2023-01-01' + random() * (TIMESTAMP '2024-01-01' - TIMESTAMP '2023-01-01'),
+    
+    -- Random customer ID between 1 and 100,000
+    floor(random() * 100000) + 1,
+    
+    -- Random Region (US, EU, ASIA, OTHER)
+    (ARRAY['US', 'EU', 'ASIA', 'OTHER'])[floor(random() * 4 + 1)],
+    
+    -- Random dollar amount
+    round((random() * 1000)::numeric, 2),
+    
+    -- 200 bytes of "garbage" text to inflate size
+    repeat('x', 200)
+FROM generate_series(1, 1000000); -- Generates 10 Million rows
+
+-- 1. Check the total count (Should be 10,000,000)
+SELECT count(*) FROM orders_flat;
+
+-- 2. Check the table size (Should be approx ~2GB)
+SELECT pg_size_pretty(pg_total_relation_size('orders_flat'));
+
+-- 3. Check a sample row
+SELECT * FROM orders_flat LIMIT 5;
+
+
+-- 1. Create the Parent Table
+CREATE TABLE orders_range (
+    id BIGINT,              -- Note: We removed SERIAL (we will copy existing IDs)
+    order_date TIMESTAMP NOT NULL,
+    customer_id INT NOT NULL,
+    region TEXT NOT NULL,
+    amount NUMERIC(10,2),
+    details TEXT
+) PARTITION BY RANGE (order_date);
+
+-- 2. Create Partitions (Quarterly)
+-- Range partitions must be defined manually or they will reject data.
+CREATE TABLE orders_range_2023_q1 PARTITION OF orders_range
+    FOR VALUES FROM ('2023-01-01') TO ('2023-04-01');
+
+CREATE TABLE orders_range_2023_q2 PARTITION OF orders_range
+    FOR VALUES FROM ('2023-04-01') TO ('2023-07-01');
+
+CREATE TABLE orders_range_2023_q3 PARTITION OF orders_range
+    FOR VALUES FROM ('2023-07-01') TO ('2023-10-01');
+
+CREATE TABLE orders_range_2023_q4 PARTITION OF orders_range
+    FOR VALUES FROM ('2023-10-01') TO ('2024-01-01');
+
+-- 3. The Migration (Copy Data)
+-- Postgres automatically routes rows to the correct Q1/Q2/Q3/Q4 table
+INSERT INTO orders_range SELECT * FROM orders_flat;
+
+
+-- 1. Create the Parent Table
+CREATE TABLE orders_list (
+    id BIGINT,
+    order_date TIMESTAMP NOT NULL,
+    customer_id INT NOT NULL,
+    region TEXT NOT NULL,
+    amount NUMERIC(10,2),
+    details TEXT
+) PARTITION BY LIST (region);
+
+-- 2. Create Partitions (Explicit Values)
+-- Every value in your data MUST match one of these lists.
+CREATE TABLE orders_list_us PARTITION OF orders_list 
+    FOR VALUES IN ('US');
+
+CREATE TABLE orders_list_eu PARTITION OF orders_list 
+    FOR VALUES IN ('EU');
+
+CREATE TABLE orders_list_asia PARTITION OF orders_list 
+    FOR VALUES IN ('ASIA');
+
+-- Catch-all for any region not listed above (optional but recommended)
+CREATE TABLE orders_list_default PARTITION OF orders_list DEFAULT;
+
+-- 3. The Migration (Copy Data)
+INSERT INTO orders_list SELECT * FROM orders_flat;
+
+
+-- 1. Create the Parent Table
+CREATE TABLE orders_hash (
+    id BIGINT,
+    order_date TIMESTAMP NOT NULL,
+    customer_id INT NOT NULL,
+    region TEXT NOT NULL,
+    amount NUMERIC(10,2),
+    details TEXT
+) PARTITION BY HASH (customer_id);
+
+-- 2. Create Partitions (Modulus)
+-- We create 4 buckets. Postgres hashes the customer_id and assigns it to 0, 1, 2, or 3.
+CREATE TABLE orders_hash_p0 PARTITION OF orders_hash FOR VALUES WITH (MODULUS 4, REMAINDER 0);
+CREATE TABLE orders_hash_p1 PARTITION OF orders_hash FOR VALUES WITH (MODULUS 4, REMAINDER 1);
+CREATE TABLE orders_hash_p2 PARTITION OF orders_hash FOR VALUES WITH (MODULUS 4, REMAINDER 2);
+CREATE TABLE orders_hash_p3 PARTITION OF orders_hash FOR VALUES WITH (MODULUS 4, REMAINDER 3);
+
+-- 3. The Migration (Copy Data)
+INSERT INTO orders_hash SELECT * FROM orders_flat;
+
+explain analyze SELECT sum(amount) 
+FROM orders_flat 
+WHERE region='US'
+
+explain analyze SELECT sum(amount) 
+FROM orders_list
+WHERE region='US';
+
+SELECT sum(amount) 
+FROM orders_range
+WHERE order_date >= '2023-03-01' AND order_date < '2023-04-01';
