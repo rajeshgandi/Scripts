@@ -1,0 +1,125 @@
+CREATE TABLE dbo.equity_common_3d_202001 PARTITION OF dbo.equity_common_3d
+ FOR VALUES FROM ('2020-01-01') TO ('2020-02-01');
+ALTER TABLE IF EXISTS dbo.equity_common_3d_202001
+ OWNER to telekurspricedb_admin_user;
+-- Index: ix_equity_common_3d_p202001
+-- DROP INDEX IF EXISTS dbo.ix_equity_common_3d_p202001;
+CREATE INDEX ix_equity_common_3d_p202001
+ ON dbo.equity_common_3d_202001 USING btree
+ (id COLLATE pg_catalog."default" ASC NULLS LAST, date ASC NULLS LAST, update_date ASC NULLS 
+LAST)
+ TABLESPACE pg_default;
+============
+Attach -Detach:
+ALTER TABLE dbo.equity_common_3d DETACH PARTITION dbo.equity_common_3d_202109;
+ALTER TABLE dbo.equity_common_3d ATTACH PARTITION dbo.equity_common_3d_202109 FOR 
+VALUES FROM ('2021-09-01') to ('2022-02-18);
+create table dbo.equity_common_3d_202202 partition of dbo.equity_common_3d for values 
+from ('2022-02-18') to ('2022-03-01');
+create table dbo.equity_common_3d_202203 partition of dbo.equity_common_3d for values 
+from ('2022-03-01') to ('2022-04-01');
+create table dbo.equity_common_3d_202204 partition of dbo.equity_common_3d for values 
+from ('2022-04-01') to ('2022-05-01');
+and so on...
+CREATE TABLE dbo.equity_common_3d_202001 PARTITION OF dbo.equity_common_3d
+ FOR VALUES FROM ('2020-01-01') TO ('2020-02-01');
+
+create table dbo.equity_common_3d_202109 partition of dbo.equity_common_3d for values from 
+('2021-09-01') to (MAXVALUE);
+SELECT pg_size_pretty (pg_relation_size('dbo.equity_common_3d_202109'));
+select now();
+ALTER TABLE dbo.equity_common_3d DETACH PARTITION dbo.equity_common_3d_202109;
+ALTER TABLE dbo.equity_common_3d ATTACH PARTITION dbo.equity_common_3d_202109 FOR 
+VALUES FROM ('2021-09-01') to ('2022-02-23');
+create table violated_rows as select * from dbo.equity_common_3d_202109
+order by date desc limit 10 ;
+delete from dbo.equity_common_3d_202109 where date='2024-06-20'
+=================
+ALTER TABLE dbo.equity_common_3d DETACH PARTITION dbo.equity_common_3d_202109;
+ALTER TABLE dbo.equity_common_3d ATTACH PARTITION dbo.equity_common_3d_202109 FOR 
+VALUES FROM ('2021-09-01') to ('2022-02-18);
+==============
+Partitioned table:
+-- Table: dbo.equity_common_3d
+-- DROP TABLE IF EXISTS dbo.equity_common_3d;
+CREATE TABLE IF NOT EXISTS dbo.equity_common_3d
+(
+ id character varying(50) COLLATE pg_catalog."default" NOT NULL,
+ date date NOT NULL,
+ source smallint NOT NULL,
+ update_date date,
+ update_time character varying(16) COLLATE pg_catalog."default",
+ integrity_flag smallint,
+ orig_id character varying(50) COLLATE pg_catalog."default",
+ currency character varying(10) COLLATE pg_catalog."default",
+ trading_symbol character varying(50) COLLATE pg_catalog."default",
+ bid_price real,
+ ask_price real,
+ open_price real,
+ high_price real,
+ low_price real,
+ last_price real,
+ last_trade_date character varying(10) COLLATE pg_catalog."default",
+ close_price real,
+ trade_vol double precision,
+ trade_vol_indicator smallint,
+ last_trade_time character varying(5) COLLATE pg_catalog."default",
+ official_close_time character varying(5) COLLATE pg_catalog."default",
+ vwap_price real,
+ mid_price real,
+ nav_price real,
+ special_price real,
+ valuation_price real,
+ trade_halt_status smallint,
+ex_date_status smallint,
+ close_type_num smallint,
+ close_type character varying(5) COLLATE pg_catalog."default",
+ exchange character varying(10) COLLATE pg_catalog."default",
+ CONSTRAINT "EQUITY_COMMON_3D_t_pkey" PRIMARY KEY (id, date, source)
+) PARTITION BY RANGE (date)
+WITH (
+ OIDS = FALSE
+)
+TABLESPACE pg_default;
+ALTER TABLE IF EXISTS dbo.equity_common_3d
+ OWNER to telekurspricedb_admin_user;
+GRANT ALL ON TABLE dbo.equity_common_3d TO telekurspricedb_admin_user;
+GRANT SELECT ON TABLE dbo.equity_common_3d TO telekurspricedb_reader_role;
+GRANT ALL ON TABLE dbo.equity_common_3d TO telekurspricedb_writer_role;
+-- Partitions SQL
+CREATE TABLE dbo.equity_common_3d_202001 PARTITION OF dbo.equity_common_3d
+ FOR VALUES FROM ('2020-01-01') TO ('2020-02-01');
+ALTER TABLE IF EXISTS dbo.equity_common_3d_202001
+ OWNER to telekurspricedb_admin_user;
+-- Index: ix_equity_common_3d_p202001
+-- DROP INDEX IF EXISTS dbo.ix_equity_common_3d_p202001;
+CREATE INDEX ix_equity_common_3d_p202001
+ ON dbo.equity_common_3d_202001 USING btree
+ (id COLLATE pg_catalog."default" ASC NULLS LAST, date ASC NULLS LAST, update_date ASC NULLS 
+LAST)
+ TABLESPACE pg_default;
+CREATE TABLE dbo.equity_common_3d_202002 PARTITION OF dbo.equity_common_3d
+ FOR VALUES FROM ('2020-02-01') TO ('2020-03-01');
+ALTER TABLE IF EXISTS dbo.equity_common_3d_202002
+ OWNER to telekurspricedb_admin_user;
+-- Index: ix_equity_common_3d_p202002
+-- DROP INDEX IF EXISTS dbo.ix_equity_common_3d_p202002;
+CREATE INDEX ix_equity_common_3d_p202002
+ ON dbo.equity_common_3d_202002 USING btree
+ (id COLLATE pg_catalog."default" ASC NULLS LAST, date ASC NULLS LAST, update_date ASC NULLS 
+LAST)
+ TABLESPACE pg_default;
+CREATE TABLE dbo.equity_common_3d_202003 PARTITION OF dbo.equity_common_3d
+ FOR VALUES FROM ('2020-03-01') TO ('2020-04-01');
+ALTER TABLE IF EXISTS dbo.equity_common_3d_202003
+ OWNER to telekurspricedb_admin_user;
+-- Index: ix_equity_common_3d_p202003
+
+
+--DROP INDEX IF EXISTS dbo.ix_equity_common_3d_p202003;
+CREATE INDEX ix_equity_common_3d_p202003
+ ON dbo.equity_common_3d_202003 USING btree
+ (id COLLATE pg_catalog."default" ASC NULLS LAST, date ASC NULLS LAST, update_date ASC NULLS 
+LAST)
+ TABLESPACE pg_default;
+
