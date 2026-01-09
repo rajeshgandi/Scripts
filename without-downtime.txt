@@ -1,0 +1,150 @@
+Online Migration: Converting orders_flat to LIST-Partitioned Table (Zero Downtime)
+This document describes a production-tested, online migration approach to convert a large, non-partitioned PostgreSQL table into a LIST-partitioned table with no application downtime.
+
+Key idea: Keep the application writing to the old table, mirror changes via triggers, backfill historical data, then atomically swap tables.
+
+Table Definition (Source)
+CREATE TABLE orders_flat (
+    id BIGSERIAL PRIMARY KEY,
+    order_date TIMESTAMP NOT NULL,
+    customer_id INT NOT NULL,
+    region TEXT NOT NULL,
+    amount NUMERIC(10,2),
+    details TEXT
+);
+⚠️ Important PostgreSQL Rule
+For partitioned tables, PostgreSQL requires:
+
+Every PRIMARY KEY or UNIQUE constraint must include the partition key.
+
+Since we partition by region, the new table must use:
+
+PRIMARY KEY (id, region)
+This change is applied only to the new partitioned table, not the source table.
+
+✅ ONLINE MIGRATION PLAN (Zero Downtime)
+Overview
+Create a new partitioned table (orders_list)
+Create partitions
+Create trigger to mirror INSERT / UPDATE / DELETE
+Backfill historical data in batches
+Atomically swap tables
+STEP 1️⃣ Create the NEW Partitioned Table (Empty)
+CREATE TABLE orders_list (
+    id BIGINT NOT NULL,
+    order_date TIMESTAMP NOT NULL,
+    customer_id INT NOT NULL,
+    region TEXT NOT NULL,
+    amount NUMERIC(10,2),
+    details TEXT,
+    CONSTRAINT orders_list_pk PRIMARY KEY (id, region)
+) PARTITION BY LIST (region);
+STEP 2️⃣ Create Partitions
+CREATE TABLE orders_list_us
+PARTITION OF orders_list
+FOR VALUES IN ('US');
+
+CREATE TABLE orders_list_eu
+PARTITION OF orders_list
+FOR VALUES IN ('EU');
+
+CREATE TABLE orders_list_asia
+PARTITION OF orders_list
+FOR VALUES IN ('ASIA');
+
+CREATE TABLE orders_list_default
+PARTITION OF orders_list
+DEFAULT;
+STEP 3️⃣ Create Supporting Indexes (Optional but Recommended)
+CREATE INDEX ON orders_list (order_date);
+CREATE INDEX ON orders_list (customer_id);
+PostgreSQL automatically creates matching indexes on all partitions.
+
+STEP 4️⃣ Create the Trigger Function (CRITICAL STEP)
+This function mirrors INSERT / UPDATE / DELETE operations from orders_flat into orders_list.
+
+CREATE OR REPLACE FUNCTION duplicate_orders_to_partitioned()
+RETURNS TRIGGER AS
+$$
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        INSERT INTO orders_list VALUES (NEW.*);
+        RETURN NEW;
+
+    ELSIF TG_OP = 'UPDATE' THEN
+        INSERT INTO orders_list VALUES (NEW.*)
+        ON CONFLICT (id, region)
+        DO UPDATE SET
+            order_date  = EXCLUDED.order_date,
+            customer_id = EXCLUDED.customer_id,
+            amount      = EXCLUDED.amount,
+            details     = EXCLUDED.details;
+        RETURN NEW;
+
+    ELSIF TG_OP = 'DELETE' THEN
+        DELETE FROM orders_list
+        WHERE id = OLD.id
+          AND region = OLD.region;
+        RETURN OLD;
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+STEP 5️⃣ Attach Trigger to Source Table
+CREATE TRIGGER trg_orders_dual_write
+AFTER INSERT OR UPDATE OR DELETE
+ON orders_flat
+FOR EACH ROW
+EXECUTE FUNCTION duplicate_orders_to_partitioned();
+📌 From this point onward:
+
+Application continues using orders_flat
+orders_list stays fully in sync
+STEP 6️⃣ Backfill Historical Data (ONLINE)
+One-time Bulk Insert
+INSERT INTO orders_list
+SELECT * FROM orders_flat
+ON CONFLICT (id, region) DO NOTHING;
+Recommended: Batched Backfill (Large Tables)
+INSERT INTO orders_list
+SELECT *
+FROM orders_flat
+WHERE id > :last_id
+ORDER BY id
+LIMIT 50000
+ON CONFLICT (id, region) DO NOTHING;
+Repeat until all rows are migrated.
+
+STEP 7️⃣ Validation (Do Not Skip)
+-- Row count check
+SELECT count(*) FROM orders_flat;
+SELECT count(*) FROM orders_list;
+
+-- Spot check
+SELECT * FROM orders_list WHERE region = 'US' LIMIT 10;
+STEP 8️⃣ Atomic Table Swap (Milliseconds of Lock)
+BEGIN;
+
+ALTER TABLE orders_flat RENAME TO orders_flat_old;
+ALTER TABLE orders_list RENAME TO orders_flat;
+
+COMMIT;
+📌 Downtime is typically milliseconds (metadata lock only).
+
+STEP 9️⃣ Cleanup
+DROP TRIGGER trg_orders_dual_write ON orders_flat_old;
+DROP FUNCTION duplicate_orders_to_partitioned();
+Optional:
+
+DROP TABLE orders_flat_old;
+⚠️ UPSERT WARNING (VERY IMPORTANT)
+After migration, the live table has:
+
+PRIMARY KEY (id, region)
+❌ This will FAIL
+INSERT INTO orders_flat (id, order_date, customer_id)
+VALUES (...)
+ON CONFLICT (id) DO UPDATE ...;
+✅ Correct UPSERT
+INSERT INTO orders_flat (id, region, order_date, customer_id)
+VALUES (...)
+ON CONFLICT (id, region) DO UPDATE ...;
