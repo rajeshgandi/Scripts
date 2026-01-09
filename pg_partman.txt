@@ -1,0 +1,94 @@
+CREATE SCHEMA partman;
+CREATE EXTENSION pg_partman SCHEMA partman;
+
+CREATE TABLE orders_range (
+    id BIGINT NOT NULL,
+    order_date TIMESTAMP NOT NULL,
+    customer_id INT NOT NULL,
+    region TEXT NOT NULL,
+    amount NUMERIC(10,2),
+    details TEXT
+) PARTITION BY RANGE (order_date);
+
+3️ Register the parent with pg_partman
+
+SELECT partman.create_parent(
+    p_parent_table => 'public.orders_range',
+    p_control      => 'order_date',
+    p_type         => 'range',
+    p_interval     => '3 months',      -- Quarterly
+    p_premake      => 4,               -- Create future partitions
+        p_start_partition => '2023-01-01'
+);
+
+CREATE INDEX ON orders_range (customer_id);
+CREATE INDEX ON orders_range (region);
+
+CREATE OR REPLACE FUNCTION duplicate_orders_to_range_partitions()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    -- INSERT
+    IF TG_OP = 'INSERT' THEN
+        INSERT INTO orders_range
+        VALUES (NEW.*);
+        RETURN NEW;
+    END IF;
+
+    -- UPDATE
+    IF TG_OP = 'UPDATE' THEN
+        -- If partition key changed, move row
+        IF NEW.order_date <> OLD.order_date THEN
+            DELETE FROM orders_range
+            WHERE id = OLD.id
+              AND order_date = OLD.order_date;
+
+            INSERT INTO orders_range
+            VALUES (NEW.*);
+        ELSE
+            -- Same partition, simple update
+            UPDATE orders_range
+            SET
+                customer_id = NEW.customer_id,
+                region      = NEW.region,
+                amount      = NEW.amount,
+                details     = NEW.details
+            WHERE id = OLD.id
+              AND order_date = OLD.order_date;
+        END IF;
+
+        RETURN NEW;
+    END IF;
+
+    -- DELETE
+    IF TG_OP = 'DELETE' THEN
+        DELETE FROM orders_range
+        WHERE id = OLD.id
+          AND order_date = OLD.order_date;
+        RETURN OLD;
+    END IF;
+
+    RETURN NULL;
+END;
+$$;
+
+
+CREATE TRIGGER trg_orders_range_dual_write
+AFTER INSERT OR UPDATE OR DELETE
+ON orders_flat
+FOR EACH ROW
+EXECUTE FUNCTION duplicate_orders_to_range_partitions();
+
+INSERT INTO orders_range
+SELECT * FROM orders_flat;
+
+SELECT count(*) FROM orders_flat;
+SELECT count(*) FROM orders_range;
+
+BEGIN;
+
+ALTER TABLE orders_flat RENAME TO orders_flat_old;
+ALTER TABLE orders_range RENAME TO orders_flat;
+
+COMMIT;
